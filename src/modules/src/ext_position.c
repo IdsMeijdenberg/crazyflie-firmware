@@ -46,7 +46,6 @@ typedef struct
 } ExtPositionCache;
 
 // Struct for logging position information
-static positionMeasurement_t ext_pos;
 static ExtPositionCache crtpExtPosCache;
 static void extPositionCrtpCB(CRTPPacket* pk);
 
@@ -70,15 +69,16 @@ static void extPositionCrtpCB(CRTPPacket* pk)
 }
 
 
-bool getExtPosition(state_t *state)
+bool getExtPosition(state_t *state, positionMeasurement_t *ext_pos, float dt_ExtPosition)
 {
   // Only use position information if it's valid and recent
   if ((xTaskGetTickCount() - crtpExtPosCache.timestamp) < M2T(5)) {
     // Get the updated position from the mocap
-    ext_pos.x = crtpExtPosCache.targetVal[crtpExtPosCache.activeSide].x;
-    ext_pos.y = crtpExtPosCache.targetVal[crtpExtPosCache.activeSide].y;
-    ext_pos.z = crtpExtPosCache.targetVal[crtpExtPosCache.activeSide].z;
-    ext_pos.stdDev = 0.01;
+    ext_pos->x = crtpExtPosCache.targetVal[crtpExtPosCache.activeSide].x;
+    ext_pos->y = crtpExtPosCache.targetVal[crtpExtPosCache.activeSide].y;
+    ext_pos->z = crtpExtPosCache.targetVal[crtpExtPosCache.activeSide].z;
+    ext_pos->stdDev = 0.01;
+    dt_ExtPosition = (xTaskGetTickCount() - crtpExtPosCache.timestamp)/1000.0;
 #ifdef ESTIMATOR_TYPE_kalman
     stateEstimatorEnqueuePosition(&ext_pos);
 #endif
@@ -87,9 +87,5 @@ bool getExtPosition(state_t *state)
   return false;
 }
 
-LOG_GROUP_START(ext_pos)
-  LOG_ADD(LOG_FLOAT, X, &ext_pos.x)
-  LOG_ADD(LOG_FLOAT, Y, &ext_pos.y)
-  LOG_ADD(LOG_FLOAT, Z, &ext_pos.z)
-LOG_GROUP_STOP(ext_pos)
+
 

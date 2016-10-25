@@ -141,6 +141,49 @@ typedef struct control_s {
   float thrust;
 } control_t;
 
+typedef struct position_SMRM {
+	float x;
+	float x_hat;
+} position_SMRM;
+
+typedef struct vel_SMRM {
+	float v;
+	float v_hat;
+} vel_SMRM;
+
+typedef struct angle_SMRM {
+	float theta;
+	float theta_hat;
+} angle_SMRM;
+
+typedef struct omega_SMRM {
+	float omega;
+	float omega_d;
+} omega_SMRM;
+
+typedef struct SMRM_sampled {
+	float s_x;
+	float s_x_hat;
+	float s_v_hat;
+} SMRM_sampled;
+
+typedef struct SMRM_state {
+	position_SMRM position;
+	vel_SMRM velocity;
+	angle_SMRM angle;
+	omega_SMRM angular_velocity;
+} SMRM_state;
+
+typedef struct SMRM_control {
+	float torque;
+} SMRM_control;
+
+typedef struct GoT_pos {
+	float x;
+	float y;
+	float z;
+} GoT_pos;
+
 typedef enum mode_e {
   modeDisable = 0,
   modeAbs,

@@ -40,6 +40,8 @@
 #include "sitaw.h"
 #include "controller.h"
 #include "power_distribution.h"
+#include "SimpleMultiRotorModel.h"
+#include "YawController.h"
 
 #ifdef ESTIMATOR_TYPE_kalman
 #include "estimator_kalman.h"
@@ -51,9 +53,19 @@ static bool isInit;
 
 // State variables for the stabilizer
 static setpoint_t setpoint;
+static setpoint_t setpoint_PID;
 static sensorData_t sensorData;
 static state_t state;
 static control_t control;
+static SMRM_state SMRM_roll;
+static SMRM_state SMRM_pitch;
+static SMRM_sampled s_roll;
+static SMRM_sampled s_pitch;
+static SMRM_control cont_roll;
+static SMRM_control cont_pitch;
+static positionMeasurement_t ext_pos;
+
+float dt_ExtPosition = 0;
 
 static void stabilizerTask(void* param);
 
@@ -66,6 +78,8 @@ void stabilizerInit(void)
   stateEstimatorInit();
   stateControllerInit();
   powerDistributionInit();
+  SimpleMultiRotorInit();
+  YawControllerInit();
 #if defined(SITAW_ENABLED)
   sitAwInit();
 #endif
@@ -111,7 +125,15 @@ static void stabilizerTask(void* param)
   while(1) {
     vTaskDelayUntil(&lastWakeTime, F2T(RATE_MAIN_LOOP));
 
-    getExtPosition(&state);
+    if (getExtPosition(&state, &ext_pos, dt_ExtPosition)) 		// Receive position from GoT
+    {
+    	SimpleMultiRotorPosition(&SMRM_roll, &SMRM_pitch, &ext_pos); 	// Update x-position of roll and pitch by the measurement of position from GoT
+    	SimpleMultiRotorSample(&SMRM_roll, &s_roll); 					// Update sampled signals x(n), x_hat(n), and v_hat(n) when there is a new measurement
+    	SimpleMultiRotorSample(&SMRM_pitch, &s_pitch);
+
+        YawAltitudeAndAttitudeController(&setpoint_PID, &ext_pos, dt_ExtPosition);
+    }
+
 #ifdef ESTIMATOR_TYPE_kalman
     stateEstimatorUpdate(&state, &sensorData, &control);
 #else
@@ -119,9 +141,16 @@ static void stabilizerTask(void* param)
     stateEstimator(&state, &sensorData, tick);
 #endif
 
-    commanderGetSetpoint(&setpoint, &state);
+    SimpleMultiRotorUpdate(&SMRM_roll, &s_roll, sensorData.gyro.x, tick); 					// Update linear-model by first order euler approximation
+    SimpleMultiRotorUpdate(&SMRM_pitch, &s_pitch, sensorData.gyro.y, tick);
 
-    sitAwUpdateSetpoint(&setpoint, &sensorData, &state);
+    commanderGetSetpoint(&setpoint, &state);
+    setpoint.thrust = setpoint_PID.thrust;
+
+//    sitAwUpdateSetpoint(&setpoint, &sensorData, &state);
+
+    SimpleMultiRotorControl(&cont_roll,&SMRM_roll,&s_roll,tick); 		// Obtain control values: torque for pitch and roll
+    SimpleMultiRotorControl(&cont_pitch,&SMRM_pitch,&s_pitch,tick);
 
     stateController(&control, &sensorData, &state, &setpoint, tick);
     powerDistribution(&control);
@@ -170,3 +199,23 @@ LOG_GROUP_STOP(mag)
 LOG_GROUP_START(controller)
 LOG_ADD(LOG_INT16, ctr_yaw, &control.yaw)
 LOG_GROUP_STOP(controller)
+
+LOG_GROUP_START(actuator)
+LOG_ADD(LOG_FLOAT, aT, &control.thrust)
+LOG_ADD(LOG_INT16, aR, &control.roll)
+LOG_ADD(LOG_INT16, aP, &control.pitch)
+LOG_ADD(LOG_INT16, aY, &control.yaw)
+LOG_GROUP_STOP(actuator)
+
+LOG_GROUP_START(SMRM_roll)
+LOG_ADD(LOG_FLOAT, x_hat, &SMRM_roll.position.x_hat)
+LOG_ADD(LOG_FLOAT, v_hat, &SMRM_roll.velocity.v_hat)
+LOG_ADD(LOG_FLOAT, th_hat, &SMRM_roll.angle.theta_hat)
+LOG_ADD(LOG_FLOAT, om_hat, &SMRM_roll.angular_velocity.omega_d)
+LOG_GROUP_STOP(SMRM_roll)
+
+LOG_GROUP_START(ext_pos)
+  LOG_ADD(LOG_FLOAT, X, &ext_pos.x)
+  LOG_ADD(LOG_FLOAT, Y, &ext_pos.y)
+  LOG_ADD(LOG_FLOAT, Z, &ext_pos.z)
+LOG_GROUP_STOP(ext_pos)

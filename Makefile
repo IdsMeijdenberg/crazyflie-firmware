@@ -28,8 +28,6 @@ ESTIMATOR          ?= complementary
 CONTROLLER         ?= pid
 POWER_DISTRIBUTION ?= stock
 
-######### Test activation ##########
-FATFS_DISKIO_TESTS  ?= 0	# Set to 1 to enable FatFS diskio function tests. Erases card.
 
 ifeq ($(PLATFORM), CF1)
 OPENOCD_TARGET    ?= target/stm32f1x_stlink.cfg
@@ -71,17 +69,21 @@ LINKER_DIR = tools/make/F405/linker
 ST_OBJ_DIR  = tools/make/F405
 endif
 
-LIB = src/lib
+STLIB = src/lib
 
 ################ Build configuration ##################
 # St Lib
-VPATH_CF1 += $(LIB)/CMSIS/Core/CM3
-VPATH_CF1 += $(LIB)/CMSIS/Core/CM3/startup/gcc
+VPATH_CF1 += $(STLIB)/CMSIS/Core/CM3
+VPATH_CF1 += $(STLIB)/CMSIS/Core/CM3/startup/gcc
+VPATH_CF1 += $(STLIB)/STM32_CPAL_Driver/src
+VPATH_CF1 += $(STLIB)/STM32_CPAL_Driver/devices/stm32f10x
 CRT0_CF1 = startup_stm32f10x_md.o system_stm32f10x.o
 
-VPATH_CF2 += $(LIB)/CMSIS/STM32F4xx/Source/
-VPATH_CF2 += $(LIB)/STM32_USB_Device_Library/Core/src
-VPATH_CF2 += $(LIB)/STM32_USB_OTG_Driver/src
+VPATH_CF2 += $(STLIB)/CMSIS/STM32F4xx/Source/
+VPATH_CF2 += $(STLIB)/STM32_CPAL_Driver/src
+VPATH_CF2 += $(STLIB)/STM32_USB_Device_Library/Core/src
+VPATH_CF2 += $(STLIB)/STM32_USB_OTG_Driver/src
+VPATH_CF2 += $(STLIB)/STM32_CPAL_Driver/devices/stm32f4xx
 VPATH_CF2 += src/deck/api src/deck/core src/deck/drivers/src src/deck/drivers/src/test
 CRT0_CF2 = startup_stm32f40xx.o system_stm32f4xx.o
 
@@ -104,14 +106,6 @@ MEMMANG_OBJ = heap_4.o
 
 VPATH += $(FREERTOS)
 FREERTOS_OBJ = list.o tasks.o queue.o timers.o $(MEMMANG_OBJ)
-
-#FatFS
-VPATH_CF2 += $(LIB)/FatFS
-FATFS_OBJ  = diskio.o ff.o syscall.o unicode.o fatfs_sd.o
-ifeq ($(FATFS_DISKIO_TESTS), 1)
-FATFS_OBJ += diskio_function_tests.o
-CFLAGS += -DUSD_RUN_DISKIO_FUNCTION_TESTS	
-endif
 
 # Crazyflie sources
 VPATH += src/init src/hal/src src/modules/src src/utils/src src/drivers/src
@@ -165,7 +159,8 @@ PROJ_OBJ += attitude_pid_controller.o sensfusion6.o stabilizer.o
 PROJ_OBJ += position_estimator_altitude.o position_controller_pid.o
 PROJ_OBJ += estimator_$(ESTIMATOR).o controller_$(CONTROLLER).o
 PROJ_OBJ += power_distribution_$(POWER_DISTRIBUTION).o
-
+PROJ_OBJ += SimpleMultiRotorModel.o
+PROJ_OBJ += YawController.o
 
 # Deck Core
 PROJ_OBJ_CF2 += deck.o deck_info.o deck_drivers.o deck_test.o
@@ -184,7 +179,6 @@ PROJ_OBJ_CF2 += buzzdeck.o
 PROJ_OBJ_CF2 += gtgps.o
 PROJ_OBJ_CF2 += dwm1000.o
 PROJ_OBJ_CF2 += cppmdeck.o
-PROJ_OBJ_CF2 += usddeck.o
 PROJ_OBJ_CF2 += vl53l0x.o
 #Deck tests
 PROJ_OBJ_CF2 += exptest.o
@@ -205,7 +199,7 @@ ifeq ($(PLATFORM), CF1)
 OBJ += $(CRT0_CF1) $(ST_OBJ_CF1) $(PROJ_OBJ_CF1)
 endif
 ifeq ($(PLATFORM), CF2)
-OBJ += $(CRT0_CF2) $(ST_OBJ_CF2) $(FATFS_OBJ) $(PROJ_OBJ_CF2)
+OBJ += $(CRT0_CF2) $(ST_OBJ_CF2) $(PROJ_OBJ_CF2)
 endif
 
 ifdef P
@@ -225,16 +219,19 @@ INCLUDES += -Isrc/config -Isrc/hal/interface -Isrc/modules/interface
 INCLUDES += -Isrc/utils/interface -Isrc/drivers/interface -Isrc/platform
 INCLUDES += -Ivendor/CMSIS/CMSIS/Include
 
-INCLUDES_CF1 += -I$(LIB)/STM32F10x_StdPeriph_Driver/inc
-INCLUDES_CF1 += -I$(LIB)/CMSIS/Core/CM3
+INCLUDES_CF1 += -I$(STLIB)/STM32F10x_StdPeriph_Driver/inc
+INCLUDES_CF1 += -I$(STLIB)/CMSIS/Core/CM3
+INCLUDES_CF1 += -I$(STLIB)/STM32_CPAL_Driver/inc
+INCLUDES_CF1 += -I$(STLIB)/STM32_CPAL_Driver/devices/stm32f10x
 
-INCLUDES_CF2 += -I$(LIB)/STM32F4xx_StdPeriph_Driver/inc
-INCLUDES_CF2 += -I$(LIB)/CMSIS/STM32F4xx/Include
-INCLUDES_CF2 += -I$(LIB)/STM32_USB_Device_Library/Core/inc
-INCLUDES_CF2 += -I$(LIB)/STM32_USB_OTG_Driver/inc
+INCLUDES_CF2 += -I$(STLIB)/STM32F4xx_StdPeriph_Driver/inc
+INCLUDES_CF2 += -I$(STLIB)/CMSIS/STM32F4xx/Include
+INCLUDES_CF2 += -I$(STLIB)/STM32_CPAL_Driver/inc
+INCLUDES_CF2 += -I$(STLIB)/STM32_CPAL_Driver/devices/stm32f4xx
+INCLUDES_CF2 += -I$(STLIB)/STM32_USB_Device_Library/Core/inc
+INCLUDES_CF2 += -I$(STLIB)/STM32_USB_OTG_Driver/inc
 INCLUDES_CF2 += -Isrc/deck/interface -Isrc/deck/drivers/interface
 INCLUDES_CF2 += -Ivendor/libdw1000/inc
-INCLUDES_CF2 += -I$(LIB)/FatFS
 
 ifeq ($(USE_FPU), 1)
 	PROCESSOR = -mcpu=cortex-m4 -mthumb -mfloat-abi=hard -mfpu=fpv4-sp-d16
@@ -283,7 +280,7 @@ CFLAGS += -MD -MP -MF $(BIN)/dep/$(@).d -MQ $(@)
 CFLAGS += -ffunction-sections -fdata-sections
 
 # Fail on warnings
-CFLAGS += -Werror
+#CFLAGS += -Werror
 
 ASFLAGS = $(PROCESSOR) $(INCLUDES)
 LDFLAGS = --specs=nano.specs $(PROCESSOR) -Wl,-Map=$(PROG).map,--cref,--gc-sections,--undefined=uxTopUsedPriority
@@ -348,9 +345,7 @@ endif
 ifeq ($(CLOAD), 1)
 	@echo "Crazyloader build!"
 endif
-ifeq ($(FATFS_DISKIO_TESTS), 1)
-	@echo "WARNING: FatFS diskio tests enabled. Erases SD-card!"
-endif
+
 
 size: compile
 	@$(SIZE) -B $(PROG).elf

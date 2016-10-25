@@ -83,9 +83,9 @@ bool sensorsAreCalibrated()
   return imu6IsCalibrated();
 }
 
-PARAM_GROUP_START(lps)
+PARAM_GROUP_START(posLive)
 PARAM_ADD(PARAM_UINT32, t, &position.timestamp)
 PARAM_ADD(PARAM_FLOAT, x, &position.x)
 PARAM_ADD(PARAM_FLOAT, y, &position.y)
 PARAM_ADD(PARAM_FLOAT, z, &position.z)
-PARAM_GROUP_STOP(sensorfusion6)
+PARAM_GROUP_STOP(posLive)

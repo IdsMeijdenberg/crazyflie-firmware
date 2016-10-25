@@ -61,7 +61,6 @@
 #define PID_YAW_KD  0.35
 #define PID_YAW_INTEGRATION_LIMIT     360.0
 
-
 #define DEFAULT_PID_INTEGRATION_LIMIT  5000.0
 
 #else
@@ -103,7 +102,7 @@
 
 typedef struct
 {
-  float desired;     //< set point
+  float desired;      //< set point
   float error;        //< error
   float prevError;    //< previous error
   float integ;        //< integral
@@ -117,6 +116,7 @@ typedef struct
   float iLimit;       //< integral limit
   float iLimitLow;    //< integral limit
   float dt;           //< delta-time dt
+  float offset;       //< offset (used in PID_thrust to cancel gravity)
 } PidObject;
 
 /**
