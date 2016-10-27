@@ -68,7 +68,7 @@ float pidUpdate(PidObject* pid, const float measured, const bool updateError)
     pid->outI = pid->ki * pid->integ;
     pid->outD = pid->kd * pid->deriv;
 
-    output = pid->outP + pid->outI + pid->outD;
+    output = pid->outP + pid->outI + pid->outD + pid->offset;
 
     pid->prevError = pid->error;
 
@@ -135,4 +135,7 @@ void pidSetKd(PidObject* pid, const float kd)
 }
 void pidSetDt(PidObject* pid, const float dt) {
     pid->dt = dt;
+}
+void pidSetOffset(PidObject* pid, const float offset){
+	pid->offset = offset;
 }

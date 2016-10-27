@@ -2,12 +2,27 @@
 #include <stdint.h>
 
 void SimpleMultiRotorInit(void);
-void SimpleMultiRotorPosition(SMRM_state *SMRM_roll, SMRM_state *SMRM_pitch, const positionMeasurement_t *pos);
-void SimpleMultiRotorUpdate(SMRM_state *SMRM_st,		const SMRM_sampled *SMRM_samp,
-														const float sensorData,
+
+void SimpleMultiRotorNewPosition(SMRM_state *SMRM_roll, SMRM_state *SMRM_pitch,
+														positionMeasurement_t *ext_pos,
+														SMRM_sampled *samp_roll,
+														SMRM_sampled *samp_pitch);
+
+void SimpleMultiRotorRunDynamics(SMRM_state *SMRM_roll, SMRM_state *SMRM_pitch,
+														SMRM_sampled *s_roll,
+														SMRM_sampled *s_pitch,
+														const float gyroX,
+														const float gyroY,
 														const uint32_t tick);
-void SimpleMultiRotorSample(const SMRM_state *SMRM_st, SMRM_sampled *SMRM_samp);
-void SimpleMultiRotorControl(SMRM_control *SMRM_cont, 	const SMRM_state*SMRM_st,
-														const SMRM_sampled *SMRM_samp,
+
+void SimpleMultiRotorTorque(SMRM_control *cont_roll, 	SMRM_control *cont_pitch,
+														SMRM_state *SMRM_roll,
+														SMRM_state *SMRM_pitch,
+														SMRM_sampled *s_roll,
+														SMRM_sampled *s_pitch,
 														const uint32_t tick);
+
+
+
+
 

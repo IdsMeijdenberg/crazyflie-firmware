@@ -42,6 +42,6 @@ struct CrtpExtPosition
 void extPositionInit(void);
 
 // Get the current position from the cache
-bool getExtPosition(state_t *state, positionMeasurement_t *ext_pos, float dt_ExtPosition);
+bool getExtPosition(state_t *state, positionMeasurement_t *ext_pos);
 
 #endif /* _EXT_POSITION_H_ */

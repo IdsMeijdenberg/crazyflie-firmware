@@ -217,4 +217,13 @@ void pidSetKd(PidObject* pid, const float kd);
  * @param[in] dt    Delta time
  */
 void pidSetDt(PidObject* pid, const float dt);
+
+/**
+ * Set a new offset for the PID.
+ *
+ * @param[in] pid   A pointer to the pid object.
+ * @param[in] dt    Offset
+ */
+void pidSetOffset(PidObject* pid, const float offset);
+
 #endif /* PID_H_ */

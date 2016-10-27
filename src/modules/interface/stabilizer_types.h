@@ -99,6 +99,7 @@ typedef struct positionMeasurement_s {
       float x;
       float y;
       float z;
+      float timeStampDelta;
     };
     float pos[3];
   };

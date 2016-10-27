@@ -31,6 +31,7 @@
 #include "system.h"
 #include "log.h"
 #include "param.h"
+#include "num.h"
 
 #include "stabilizer.h"
 
@@ -64,8 +65,6 @@ static SMRM_sampled s_pitch;
 static SMRM_control cont_roll;
 static SMRM_control cont_pitch;
 static positionMeasurement_t ext_pos;
-
-float dt_ExtPosition = 0;
 
 static void stabilizerTask(void* param);
 
@@ -125,13 +124,10 @@ static void stabilizerTask(void* param)
   while(1) {
     vTaskDelayUntil(&lastWakeTime, F2T(RATE_MAIN_LOOP));
 
-    if (getExtPosition(&state, &ext_pos, dt_ExtPosition)) 		// Receive position from GoT
+    if (getExtPosition(&state, &ext_pos)) 		// Read new data (if available)
     {
-    	SimpleMultiRotorPosition(&SMRM_roll, &SMRM_pitch, &ext_pos); 	// Update x-position of roll and pitch by the measurement of position from GoT
-    	SimpleMultiRotorSample(&SMRM_roll, &s_roll); 					// Update sampled signals x(n), x_hat(n), and v_hat(n) when there is a new measurement
-    	SimpleMultiRotorSample(&SMRM_pitch, &s_pitch);
-
-        YawAltitudeAndAttitudeController(&setpoint_PID, &ext_pos, dt_ExtPosition);
+//        SimpleMultiRotorNewPosition(&SMRM_roll, &SMRM_pitch, &ext_pos, &s_roll, &s_pitch);
+        YawAltitudeController(&setpoint_PID, &ext_pos, ext_pos.timeStampDelta);
     }
 
 #ifdef ESTIMATOR_TYPE_kalman
@@ -141,17 +137,19 @@ static void stabilizerTask(void* param)
     stateEstimator(&state, &sensorData, tick);
 #endif
 
-    SimpleMultiRotorUpdate(&SMRM_roll, &s_roll, sensorData.gyro.x, tick); 					// Update linear-model by first order euler approximation
-    SimpleMultiRotorUpdate(&SMRM_pitch, &s_pitch, sensorData.gyro.y, tick);
+//    SimpleMultiRotorRunDynamics(&SMRM_roll, &SMRM_pitch, &s_roll, &s_pitch,
+//    										sensorData.gyro.x,
+//											sensorData.gyro.y, tick); // Update linear-model by first order euler approximation
+//    SimpleMultiRotorTorque(&cont_roll, &cont_pitch, &SMRM_roll, &SMRM_pitch, &s_roll, &s_pitch, tick);
 
     commanderGetSetpoint(&setpoint, &state);
-    setpoint.thrust = setpoint_PID.thrust;
+    if (setpoint.thrust < 1000){
+    	setpoint.thrust = 0;
+    } else {
+    	setpoint.thrust = min(setpoint_PID.thrust, 60000);
+    }
 
-//    sitAwUpdateSetpoint(&setpoint, &sensorData, &state);
-
-    SimpleMultiRotorControl(&cont_roll,&SMRM_roll,&s_roll,tick); 		// Obtain control values: torque for pitch and roll
-    SimpleMultiRotorControl(&cont_pitch,&SMRM_pitch,&s_pitch,tick);
-
+    sitAwUpdateSetpoint(&setpoint, &sensorData, &state);
     stateController(&control, &sensorData, &state, &setpoint, tick);
     powerDistribution(&control);
 
@@ -216,6 +214,6 @@ LOG_GROUP_STOP(SMRM_roll)
 
 LOG_GROUP_START(ext_pos)
   LOG_ADD(LOG_FLOAT, X, &ext_pos.x)
-  LOG_ADD(LOG_FLOAT, Y, &ext_pos.y)
-  LOG_ADD(LOG_FLOAT, Z, &ext_pos.z)
+  LOG_ADD(LOG_FLOAT, Y, &setpoint_PID.thrust)
+  LOG_ADD(LOG_FLOAT, Z, &ext_pos.timeStampDelta)
 LOG_GROUP_STOP(ext_pos)

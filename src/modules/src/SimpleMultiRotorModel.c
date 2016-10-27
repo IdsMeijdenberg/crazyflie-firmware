@@ -23,6 +23,14 @@ static int32_t lastUpdate;
 static bool isInit = false;
 
 static void DynamicEquationSMRM(SMRM_state *SMRM_st, const SMRM_sampled *SMRM_samp, const float sensorData, float dt);
+static void SimpleMultiRotorPosition(SMRM_state *SMRM_roll, SMRM_state *SMRM_pitch, const positionMeasurement_t *pos);
+static void SimpleMultiRotorSample(const SMRM_state *SMRM_st, SMRM_sampled *SMRM_samp);
+static void SimpleMultiRotorUpdate(SMRM_state *SMRM_st,		const SMRM_sampled *SMRM_samp,
+															const float sensorData,
+															const uint32_t tick);
+static void SimpleMultiRotorControl(SMRM_control *SMRM_cont, 	const SMRM_state*SMRM_st,
+														const SMRM_sampled *SMRM_samp,
+														const uint32_t tick);
 
 void SimpleMultiRotorInit(void)
 {
@@ -33,22 +41,56 @@ void SimpleMultiRotorInit(void)
 	return;
 }
 
-void SimpleMultiRotorPosition(SMRM_state *SMRM_roll, SMRM_state *SMRM_pitch, const positionMeasurement_t *pos)
+void SimpleMultiRotorNewPosition(SMRM_state *SMRM_roll, SMRM_state *SMRM_pitch,
+														positionMeasurement_t *ext_pos,
+														SMRM_sampled *s_roll,
+														SMRM_sampled *s_pitch)
+{
+	SimpleMultiRotorPosition(SMRM_roll, SMRM_pitch, ext_pos); 	// Update x-position of roll and pitch by the measurement of position from GoT
+	SimpleMultiRotorSample(SMRM_roll, s_roll); 					// Update sampled signals x(n), x_hat(n), and v_hat(n) when there is a new measurement
+	SimpleMultiRotorSample(SMRM_pitch, s_pitch);
+}
+
+void SimpleMultiRotorRunDynamics(SMRM_state *SMRM_roll, SMRM_state *SMRM_pitch,
+														SMRM_sampled *s_roll,
+														SMRM_sampled *s_pitch,
+														const float GyroX,
+														const float GyroY,
+														const uint32_t tick)
+{
+	    SimpleMultiRotorUpdate(SMRM_roll, s_roll, GyroX, tick);
+	    SimpleMultiRotorUpdate(SMRM_pitch, s_pitch, GyroY, tick);
+}
+
+void SimpleMultiRotorTorque(SMRM_control *cont_roll, 	SMRM_control *cont_pitch,
+														SMRM_state *SMRM_roll,
+														SMRM_state *SMRM_pitch,
+														SMRM_sampled *s_roll,
+														SMRM_sampled *s_pitch,
+														const uint32_t tick)
+{
+	    SimpleMultiRotorControl(cont_roll,SMRM_roll,s_roll,tick); 		// Obtain control values: torque for pitch and roll
+	    SimpleMultiRotorControl(cont_pitch,SMRM_pitch,s_pitch,tick);
+}
+
+
+
+static void SimpleMultiRotorPosition(SMRM_state *SMRM_roll, SMRM_state *SMRM_pitch, const positionMeasurement_t *pos)
 {
 	SMRM_roll->position.x 	= pos->y;
 	SMRM_pitch->position.x 	=-pos->x;
 }
 
-void SimpleMultiRotorSample(const SMRM_state *SMRM_st, SMRM_sampled *SMRM_samp)
+static void SimpleMultiRotorSample(const SMRM_state *SMRM_st, SMRM_sampled *SMRM_samp)
 {
 	SMRM_samp->s_x  		= SMRM_st->position.x;
 	SMRM_samp->s_x_hat  	= SMRM_st->position.x_hat;
 	SMRM_samp->s_v_hat  	= SMRM_st->velocity.v_hat;
 }
 
-void SimpleMultiRotorUpdate(SMRM_state *SMRM_st,		const SMRM_sampled *SMRM_samp,
-														const float sensorData,
-														const uint32_t tick)
+static void SimpleMultiRotorUpdate(SMRM_state *SMRM_st,		const SMRM_sampled *SMRM_samp,
+															const float sensorData,
+															const uint32_t tick)
 {
 	if ((tick - lastUpdate) >= 1000/UPDATE_FREQUENCY)
 		{
