@@ -142,48 +142,55 @@ typedef struct control_s {
   float thrust;
 } control_t;
 
-typedef struct position_SMRM {
+typedef struct position_SMRM_s {
 	float x;
 	float x_hat;
-} position_SMRM;
+} position_SMRM_t;
 
-typedef struct vel_SMRM {
+typedef struct vel_SMRM_s {
 	float v;
 	float v_hat;
-} vel_SMRM;
+} vel_SMRM_t;
 
-typedef struct angle_SMRM {
+typedef struct angle_SMRM_s {
 	float theta;
 	float theta_hat;
-} angle_SMRM;
+} angle_SMRM_t;
 
-typedef struct omega_SMRM {
+typedef struct omega_SMRM_s {
 	float omega;
 	float omega_d;
-} omega_SMRM;
+} omega_SMRM_t;
 
-typedef struct SMRM_sampled {
+typedef struct SMRM_sampled_s {
 	float s_x;
 	float s_x_hat;
 	float s_v_hat;
-} SMRM_sampled;
+} SMRM_sampled_t;
 
-typedef struct SMRM_state {
-	position_SMRM position;
-	vel_SMRM velocity;
-	angle_SMRM angle;
-	omega_SMRM angular_velocity;
-} SMRM_state;
+typedef struct SMRM_state_s {
+	position_SMRM_t position;
+	vel_SMRM_t velocity;
+	angle_SMRM_t angle;
+	omega_SMRM_t angular_velocity;
+} SMRM_state_t;
 
-typedef struct SMRM_control {
+typedef struct SMRM_control_s {
 	float torque;
-} SMRM_control;
+} SMRM_control_t;
 
-typedef struct GoT_pos {
-	float x;
-	float y;
-	float z;
-} GoT_pos;
+typedef struct altitude_state_s {
+	float x_hat;
+	float v_hat;
+	float input;
+} altitude_state_t;
+
+typedef struct KALMAN_gain_s {
+	float Lx;
+	float Lv;
+	float Lth;
+	float Lom;
+} KALMAN_gain_t;
 
 typedef enum mode_e {
   modeDisable = 0,

@@ -51,6 +51,10 @@
 #endif
 
 static bool isInit;
+static int missedMeasurement = 0;
+static float dt_meas = 0;
+uint32_t tick_receive_meas = 0;
+
 
 // State variables for the stabilizer
 static setpoint_t setpoint;
@@ -58,13 +62,21 @@ static setpoint_t setpoint_PID;
 static sensorData_t sensorData;
 static state_t state;
 static control_t control;
-static SMRM_state SMRM_roll;
-static SMRM_state SMRM_pitch;
-static SMRM_sampled s_roll;
-static SMRM_sampled s_pitch;
-static SMRM_control cont_roll;
-static SMRM_control cont_pitch;
+
+static SMRM_state_t SMRM_roll;
+static SMRM_state_t SMRM_pitch;
+static SMRM_sampled_t s_roll;
+static SMRM_sampled_t s_pitch;
+static SMRM_control_t cont_roll;
+static SMRM_control_t cont_pitch;
+
+static altitude_state_t altitude_state;
+
 static positionMeasurement_t ext_pos;
+
+#define MEAS_THRESHOLD (0.15f) 		// When there is no new data received for 0.15 seconds, define as measurement intermittence
+#define TORQUE_SCALING (1.0f) 		// Scaling used for torque needed for suitable values for powerDistribution
+
 
 static void stabilizerTask(void* param);
 
@@ -124,33 +136,54 @@ static void stabilizerTask(void* param)
   while(1) {
     vTaskDelayUntil(&lastWakeTime, F2T(RATE_MAIN_LOOP));
 
-    if (getExtPosition(&state, &ext_pos)) 		// Read new data (if available)
-    {
-//        SimpleMultiRotorNewPosition(&SMRM_roll, &SMRM_pitch, &ext_pos, &s_roll, &s_pitch);
-        YawAltitudeController(&setpoint_PID, &ext_pos, ext_pos.timeStampDelta);
+    dt_meas = (float)(xTaskGetTickCount() - tick_receive_meas)/1000.0;
+
+    if (dt_meas >= MEAS_THRESHOLD){
+    	missedMeasurement = 1;
+//    	nrMissedMeasurements = nrMissedMeasurements + 1;
+    }
+    else{
+    	missedMeasurement = 0;
     }
 
-#ifdef ESTIMATOR_TYPE_kalman
-    stateEstimatorUpdate(&state, &sensorData, &control);
-#else
+    if (getExtPosition(&state, &ext_pos) || missedMeasurement == 1) {	// Read new data (if available) OR when detected measurement intermittence
+
+    	if (missedMeasurement == 1){
+    		SimpleMultiRotorLocalisation_off();
+    	}
+    	else{
+    		SimpleMultiRotorLocalisation_on();
+    	}
+
+    	SimpleMultiRotorNewPosition(&SMRM_roll, &SMRM_pitch, &ext_pos, &s_roll, &s_pitch);
+        YawAltitudeController(&setpoint_PID, &ext_pos, dt_meas);
+        tick_receive_meas = xTaskGetTickCount();
+    }
+
     sensorsAcquire(&sensorData, tick);
     stateEstimator(&state, &sensorData, tick);
-#endif
-
-//    SimpleMultiRotorRunDynamics(&SMRM_roll, &SMRM_pitch, &s_roll, &s_pitch,
-//    										sensorData.gyro.x,
-//											sensorData.gyro.y, tick); // Update linear-model by first order euler approximation
-//    SimpleMultiRotorTorque(&cont_roll, &cont_pitch, &SMRM_roll, &SMRM_pitch, &s_roll, &s_pitch, tick);
-
     commanderGetSetpoint(&setpoint, &state);
+    sitAwUpdateSetpoint(&setpoint, &sensorData, &state);
+    stateController(&control, &sensorData, &state, &setpoint, tick);
+
     if (setpoint.thrust < 1000){
     	setpoint.thrust = 0;
     } else {
     	setpoint.thrust = min(setpoint_PID.thrust, 60000);
     }
 
-    sitAwUpdateSetpoint(&setpoint, &sensorData, &state);
-    stateController(&control, &sensorData, &state, &setpoint, tick);
+    // Update linear-model by first order euler approximation and calculate input torque
+    if (setpoint.thrust > 1000) {
+    SimpleMultiRotorRunDynamics(&SMRM_roll, &SMRM_pitch, &s_roll, &s_pitch,	sensorData.gyro.x,sensorData.gyro.y, tick);
+    YawAltitudeRunDynamics(&altitude_state, &ext_pos, &setpoint, tick);
+    SimpleMultiRotorTorque(&cont_roll, &cont_pitch, &SMRM_roll, &SMRM_pitch, &s_roll, &s_pitch, sensorData.gyro.x, sensorData.gyro.y, tick);
+    SimpleMultiRotorScaleInput(&cont_roll, &cont_pitch,TORQUE_SCALING);
+    }
+
+//    if (0){
+//    	control.roll = cont_roll.torque;
+//    	control.pitch = cont_pitch.torque;
+//    }
     powerDistribution(&control);
 
     tick++;
@@ -212,8 +245,15 @@ LOG_ADD(LOG_FLOAT, th_hat, &SMRM_roll.angle.theta_hat)
 LOG_ADD(LOG_FLOAT, om_hat, &SMRM_roll.angular_velocity.omega_d)
 LOG_GROUP_STOP(SMRM_roll)
 
+LOG_GROUP_START(SMRM_pitch)
+LOG_ADD(LOG_FLOAT, x_hat, &SMRM_pitch.position.x_hat)
+LOG_ADD(LOG_FLOAT, v_hat, &SMRM_pitch.velocity.v_hat)
+LOG_ADD(LOG_FLOAT, th_hat, &SMRM_pitch.angle.theta_hat)
+LOG_ADD(LOG_FLOAT, om_hat, &SMRM_pitch.angular_velocity.omega_d)
+LOG_GROUP_STOP(SMRM_pitch)
+
 LOG_GROUP_START(ext_pos)
   LOG_ADD(LOG_FLOAT, X, &ext_pos.x)
-  LOG_ADD(LOG_FLOAT, Y, &setpoint_PID.thrust)
-  LOG_ADD(LOG_FLOAT, Z, &ext_pos.timeStampDelta)
+  LOG_ADD(LOG_FLOAT, Y, &ext_pos.y)
+  LOG_ADD(LOG_FLOAT, Z, &ext_pos.z)
 LOG_GROUP_STOP(ext_pos)

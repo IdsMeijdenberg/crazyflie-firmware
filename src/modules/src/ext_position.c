@@ -85,10 +85,10 @@ bool getExtPosition(state_t *state, positionMeasurement_t *ext_pos)
     ext_pos->y = crtpExtPosCache.targetVal[crtpExtPosCache.activeSide].y;
     ext_pos->z = crtpExtPosCache.targetVal[crtpExtPosCache.activeSide].z;
     ext_pos->stdDev = 0.01;
-    float dt = (float)(xTaskGetTickCount() - lastTimeStamp)/1000.0;
-    ext_pos->timeStampDelta = dt;
-    lastTimeStamp = xTaskGetTickCount();
-
+//    float dt = (float)(xTaskGetTickCount() - lastTimeStamp)/1000.0;
+//    ext_pos->timeStampDelta = dt;
+//
+//    lastTimeStamp = xTaskGetTickCount();
     lastExtPosx = ext_pos->x;
     lastExtPosy = ext_pos->y;
     lastExtPosz = ext_pos->z;

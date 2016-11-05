@@ -3,35 +3,41 @@
  */
 #include "SimpleMultiRotorModel.h"
 
-#define K_X  (1.0708f)
-#define K_V  (0.4674f)
-#define K_P  (0.2319f)
-#define K_D  (0.0251f)
-#define L_X  (2.9303f)
-#define L_V  (4.0459f)
-#define L_TH (0.3367f)
-#define L_OM (0.1365f)
+// MACROS
+#define K_X  (0.3516f)
+#define K_V  (0.2818f)
+#define K_P  (0.0283f)
+#define K_D  (0.0051f)
+#define L_X  (3.3559f)
+#define L_V  (5.2354f)
+#define L_TH (0.4627f)
+#define L_OM (0.1337f)
 #define GRAVITY (9.91f)
 #define J_ROLLPITCH (2.3951e-5f)
-
 #define PI	3.14159265358979f
 #define DEG_TO_RAD (PI/180.0f)
-#define UPDATE_FREQUENCY 1000
-#define CONTROL_RATE 500
+#define UPDATE_FREQUENCY 200
+#define CONTROL_RATE 200
 
-static int32_t lastUpdate;
+//State variables and normal variables for SimpleMultiRotorModel
+KALMAN_gain_t kalman_gain;
 static bool isInit = false;
 
-static void DynamicEquationSMRM(SMRM_state *SMRM_st, const SMRM_sampled *SMRM_samp, const float sensorData, float dt);
-static void SimpleMultiRotorPosition(SMRM_state *SMRM_roll, SMRM_state *SMRM_pitch, const positionMeasurement_t *pos);
-static void SimpleMultiRotorSample(const SMRM_state *SMRM_st, SMRM_sampled *SMRM_samp);
-static void SimpleMultiRotorUpdate(SMRM_state *SMRM_st,		const SMRM_sampled *SMRM_samp,
-															const float sensorData,
-															const uint32_t tick);
-static void SimpleMultiRotorControl(SMRM_control *SMRM_cont, 	const SMRM_state*SMRM_st,
-														const SMRM_sampled *SMRM_samp,
-														const uint32_t tick);
+//Private functions
+static void DynamicEquationSMRM(SMRM_state_t *SMRM_st, 	const SMRM_sampled_t *SMRM_samp,
+														const float gyroMeasurement,
+														float dt);
 
+static void SimpleMultiRotorPosition(SMRM_state_t *SMRM_roll, SMRM_state_t *SMRM_pitch, const positionMeasurement_t *pos);
+static void SimpleMultiRotorSample(const SMRM_state_t *SMRM_st, SMRM_sampled_t *SMRM_samp);
+void SimpleMultiRotorUpdate(SMRM_state_t *SMRM_st,	const SMRM_sampled_t *SMRM_samp,
+		const float sensorData,
+		const float dt);
+static void SimpleMultiRotorControl(SMRM_control_t *SMRM_cont, 	const SMRM_state_t*SMRM_st,
+		const SMRM_sampled_t *SMRM_samp,
+		const float gyroMeasurement);
+
+//Public functions
 void SimpleMultiRotorInit(void)
 {
 	if(isInit)
@@ -41,117 +47,126 @@ void SimpleMultiRotorInit(void)
 	return;
 }
 
-void SimpleMultiRotorNewPosition(SMRM_state *SMRM_roll, SMRM_state *SMRM_pitch,
-														positionMeasurement_t *ext_pos,
-														SMRM_sampled *s_roll,
-														SMRM_sampled *s_pitch)
+void SimpleMultiRotorNewPosition(SMRM_state_t *SMRM_roll, SMRM_state_t *SMRM_pitch,
+		positionMeasurement_t *ext_pos,
+		SMRM_sampled_t *s_roll,
+		SMRM_sampled_t *s_pitch)
 {
 	SimpleMultiRotorPosition(SMRM_roll, SMRM_pitch, ext_pos); 	// Update x-position of roll and pitch by the measurement of position from GoT
 	SimpleMultiRotorSample(SMRM_roll, s_roll); 					// Update sampled signals x(n), x_hat(n), and v_hat(n) when there is a new measurement
 	SimpleMultiRotorSample(SMRM_pitch, s_pitch);
 }
 
-void SimpleMultiRotorRunDynamics(SMRM_state *SMRM_roll, SMRM_state *SMRM_pitch,
-														SMRM_sampled *s_roll,
-														SMRM_sampled *s_pitch,
-														const float GyroX,
-														const float GyroY,
-														const uint32_t tick)
-{
-	    SimpleMultiRotorUpdate(SMRM_roll, s_roll, GyroX, tick);
-	    SimpleMultiRotorUpdate(SMRM_pitch, s_pitch, GyroY, tick);
+void SimpleMultiRotorRunDynamics(SMRM_state_t *SMRM_roll, 	SMRM_state_t *SMRM_pitch,
+															SMRM_sampled_t *s_roll,
+															SMRM_sampled_t *s_pitch,
+															const float GyroX,
+															const float GyroY,
+															const uint32_t tick){
+	if (RATE_DO_EXECUTE(UPDATE_FREQUENCY, tick))
+	{
+
+		SimpleMultiRotorUpdate(SMRM_roll, s_roll, GyroX, 1.0/UPDATE_FREQUENCY);
+		SimpleMultiRotorUpdate(SMRM_pitch, s_pitch, GyroY, 1.0/UPDATE_FREQUENCY);
+
+	}
 }
 
-void SimpleMultiRotorTorque(SMRM_control *cont_roll, 	SMRM_control *cont_pitch,
-														SMRM_state *SMRM_roll,
-														SMRM_state *SMRM_pitch,
-														SMRM_sampled *s_roll,
-														SMRM_sampled *s_pitch,
-														const uint32_t tick)
+void SimpleMultiRotorLocalisation_on(){
+
+	kalman_gain.Lx = L_X;
+	kalman_gain.Lv = L_V;
+	kalman_gain.Lth = L_TH;
+	kalman_gain.Lom = L_OM;
+}
+
+void SimpleMultiRotorLocalisation_off(){
+
+	kalman_gain.Lx = 0;
+	kalman_gain.Lv = 0;
+	kalman_gain.Lth = 0;
+	kalman_gain.Lom = 0;
+}
+
+void SimpleMultiRotorScaleInput(SMRM_control_t *cont_roll,SMRM_control_t *cont_pitch,
+		float TORQUE_SCALING)
 {
-	    SimpleMultiRotorControl(cont_roll,SMRM_roll,s_roll,tick); 		// Obtain control values: torque for pitch and roll
-	    SimpleMultiRotorControl(cont_pitch,SMRM_pitch,s_pitch,tick);
+	cont_roll->torque = cont_roll->torque*TORQUE_SCALING;
+	cont_pitch->torque= cont_pitch->torque*TORQUE_SCALING;
 }
 
 
-
-static void SimpleMultiRotorPosition(SMRM_state *SMRM_roll, SMRM_state *SMRM_pitch, const positionMeasurement_t *pos)
+static void SimpleMultiRotorPosition(SMRM_state_t *SMRM_roll, SMRM_state_t *SMRM_pitch, const positionMeasurement_t *pos)
 {
 	SMRM_roll->position.x 	= pos->y;
 	SMRM_pitch->position.x 	=-pos->x;
 }
 
-static void SimpleMultiRotorSample(const SMRM_state *SMRM_st, SMRM_sampled *SMRM_samp)
+static void SimpleMultiRotorSample(const SMRM_state_t *SMRM_st, SMRM_sampled_t *SMRM_samp)
 {
 	SMRM_samp->s_x  		= SMRM_st->position.x;
 	SMRM_samp->s_x_hat  	= SMRM_st->position.x_hat;
 	SMRM_samp->s_v_hat  	= SMRM_st->velocity.v_hat;
 }
 
-static void SimpleMultiRotorUpdate(SMRM_state *SMRM_st,		const SMRM_sampled *SMRM_samp,
-															const float sensorData,
-															const uint32_t tick)
+void SimpleMultiRotorUpdate(SMRM_state_t *SMRM_st,	const SMRM_sampled_t *SMRM_samp,
+													const float sensorData,
+													const float dt)
 {
-	if ((tick - lastUpdate) >= 1000/UPDATE_FREQUENCY)
-		{
 		float gyroscope_meas = sensorData * DEG_TO_RAD; 		// Gyro measurement is in deg/sec, we need rad/sec
-		float dt = (float)(tick-lastUpdate)/1000.0;
-
-		DynamicEquationSMRM(SMRM_st, SMRM_samp, gyroscope_meas,dt);
-		}
-
-	lastUpdate = tick;
-
+		DynamicEquationSMRM(SMRM_st, SMRM_samp, gyroscope_meas, dt);
 }
 
-static void DynamicEquationSMRM(SMRM_state *SMRM_st, const SMRM_sampled *SMRM_samp, const float sensorData, float dt)
+static void DynamicEquationSMRM(SMRM_state_t *SMRM_st, 	const SMRM_sampled_t *SMRM_samp,
+														const float gyroMeasurement,
+														float dt)
 {
-	float Y[8]  = {0};
-	float dY[8] = {0};
+	float Y[4]  = {0};
+	float dY[4] = {0};
 
-	Y[0] = SMRM_st->position.x;
-	Y[1] = SMRM_st->velocity.v;
-	Y[2] = SMRM_st->angle.theta;
-	Y[3] = SMRM_st->angular_velocity.omega;
-	Y[4] = SMRM_st->position.x_hat;
-	Y[5] = SMRM_st->velocity.v_hat;
-	Y[6] = SMRM_st->angle.theta_hat;
-	Y[7] = SMRM_st->angular_velocity.omega_d;
+	Y[0] = SMRM_st->position.x_hat;
+	Y[1] = SMRM_st->velocity.v_hat;
+	Y[2] = SMRM_st->angle.theta_hat;
+	Y[3] = SMRM_st->angular_velocity.omega_d;
 
-	dY[0] = Y[1];
-	dY[1] = GRAVITY*Y[2];
-	dY[2] = Y[3];
-	dY[3] = (K_P*(-K_X*SMRM_samp->s_x_hat - K_V*SMRM_samp->s_v_hat - Y[6]) - K_D*(sensorData + Y[7]))/(J_ROLLPITCH);
-	dY[4] = Y[5] + L_X*(SMRM_samp->s_x - SMRM_samp->s_x_hat);
-	dY[5] = GRAVITY*Y[6] + L_V*(SMRM_samp->s_x - SMRM_samp->s_x_hat);
-	dY[6] = sensorData + Y[7] + L_TH*(SMRM_samp->s_x - SMRM_samp->s_x_hat);
-	dY[7] = L_OM*(SMRM_samp->s_x - SMRM_samp->s_x_hat);
+	dY[0] = Y[1] + kalman_gain.Lx*(SMRM_samp->s_x - SMRM_samp->s_x_hat);
+	dY[1] = GRAVITY*Y[2] + kalman_gain.Lv*(SMRM_samp->s_x - SMRM_samp->s_x_hat);
+	dY[2] = gyroMeasurement + Y[3] + kalman_gain.Lth*(SMRM_samp->s_x - SMRM_samp->s_x_hat);
+	dY[3] = kalman_gain.Lom*(SMRM_samp->s_x - SMRM_samp->s_x_hat);
 
-	Y[0] = Y[0] + dY[0]*dt;
+	Y[0] = Y[0] + dY[0]*dt; 			// First order euler approximation
 	Y[1] = Y[1] + dY[1]*dt;
 	Y[2] = Y[2] + dY[2]*dt;
 	Y[3] = Y[3] + dY[3]*dt;
-	Y[4] = Y[4] + dY[4]*dt;
-	Y[5] = Y[5] + dY[5]*dt;
-	Y[6] = Y[6] + dY[6]*dt;
-	Y[7] = Y[7] + dY[7]*dt;
 
-	SMRM_st->position.x  				= Y[0];
-	SMRM_st->velocity.v  				= Y[1];
-	SMRM_st->angle.theta  				= Y[2];
-	SMRM_st->angular_velocity.omega  	= Y[3];
-	SMRM_st->position.x_hat  			= Y[4];
-	SMRM_st->velocity.v_hat  			= Y[5];
-	SMRM_st->angle.theta_hat  			= Y[6];
-	SMRM_st->angular_velocity.omega_d   = Y[7];
+	SMRM_st->position.x_hat  			= Y[0];
+	SMRM_st->velocity.v_hat  			= Y[1];
+	SMRM_st->angle.theta_hat  			= Y[2];
+	SMRM_st->angular_velocity.omega_d   = Y[3];
 
 }
 
-void SimpleMultiRotorControl(SMRM_control *SMRM_cont, 	const SMRM_state*SMRM_st,
-														const SMRM_sampled *SMRM_samp,
-														const uint32_t tick)
+void SimpleMultiRotorTorque(SMRM_control_t *cont_roll, 	SMRM_control_t *cont_pitch,
+		SMRM_state_t *SMRM_roll,
+		SMRM_state_t *SMRM_pitch,
+		SMRM_sampled_t *s_roll,
+		SMRM_sampled_t *s_pitch,
+		float gyroRoll,
+		float gyroPitch,
+		const uint32_t tick)
 {
-	if (RATE_DO_EXECUTE(CONTROL_RATE, tick))
-	SMRM_cont->torque = K_P*(-K_X*SMRM_samp->s_x_hat - K_V*SMRM_samp->s_v_hat - SMRM_st->angle.theta_hat) - K_D*(SMRM_st->angular_velocity.omega + SMRM_st->angular_velocity.omega_d);
+	if (RATE_DO_EXECUTE(CONTROL_RATE, tick)){
+		float gyroRollRad = gyroRoll * DEG_TO_RAD; 		// Gyro measurement is in deg/sec, we need rad/sec
+		float gyroPitchRad = gyroPitch * DEG_TO_RAD;
+		SimpleMultiRotorControl(cont_roll,SMRM_roll,s_roll,gyroRollRad); 		// Obtain control values: torque for pitch and roll
+		SimpleMultiRotorControl(cont_pitch,SMRM_pitch,s_pitch,gyroPitchRad);
+	}
+}
+
+static void SimpleMultiRotorControl(SMRM_control_t *SMRM_cont,	const SMRM_state_t*SMRM_st,
+																const SMRM_sampled_t *SMRM_samp,
+																const float gyroMeasurement)
+{
+		SMRM_cont->torque = K_P*(-K_X*SMRM_samp->s_x_hat - K_V*SMRM_samp->s_v_hat - SMRM_st->angle.theta_hat) - K_D*(gyroMeasurement + SMRM_st->angular_velocity.omega_d);
 }
 
