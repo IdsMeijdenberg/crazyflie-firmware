@@ -18,16 +18,15 @@
 #define DT_DYNAMIC_THRESHOLD (0.05f)
 #define UPDATE_FREQUENCY_ALTITUDE 200
 
-#define L_X (2.114)
-#define L_V (2.236)
+#define L_X_alt (2.114)
+#define L_V_alt (2.236)
 #define GRAVITY (9.91f)
 #define MASS_CRAZYFLIE (0.039f)
-#define THRUST_TO_G GRAVITY*MASS_CRAZYFLIE/42598.4
+#define THRUST_TO_G 0.39/36000.0
+#define Z_REF (-0.25f)
 
 static bool isInit = false;
-static uint32_t tick_last_dynamic;
 PidObject pidAltitude;
-int16_t altitudeOutput;
 /*
  * Private functions
  */
@@ -65,28 +64,27 @@ void YawAltitudeRunDynamics(altitude_state_t *altitude_state, positionMeasuremen
 {
 	if (RATE_DO_EXECUTE(UPDATE_FREQUENCY_ALTITUDE, tick))
 		{
-		float dt_dynamic = (float)(tick - tick_last_dynamic)/1000.0;
-				if (dt_dynamic > DT_DYNAMIC_THRESHOLD){
-					dt_dynamic = DT_DYNAMIC_THRESHOLD;
-				}
-		DynamicEquationAltitude(altitude_state, ext_pos, setpoint, dt_dynamic);
-		tick_last_dynamic = tick;
+
+			DynamicEquationAltitude(altitude_state, ext_pos, setpoint, 1.0/UPDATE_FREQUENCY_ALTITUDE);
+
 		}
 }
 
 static void DynamicEquationAltitude(altitude_state_t *state, positionMeasurement_t *ext_pos, setpoint_t *setpoint, float dt)
 {
 
-	state->input = setpoint->thrust*THRUST_TO_G - MASS_CRAZYFLIE*GRAVITY;
+	state->input = setpoint->thrust*0.3825/36000.0 - 0.3825;
 
 	float Y[2] = {0};
 	float dY[2]= {0};
+	float meas = 0;
 
+	meas = ext_pos->z + Z_REF;
 	Y[0] = state->x_hat;
 	Y[1] = state->v_hat;
 
-	dY[0] = Y[1] + L_X*(ext_pos->z - Y[0]);
-	dY[1] = -state->input/MASS_CRAZYFLIE + L_V*(ext_pos->z - Y[0]);
+	dY[0] = Y[1] + L_X_alt*(meas - Y[0]);
+	dY[1] = -state->input/MASS_CRAZYFLIE + L_V_alt*(meas - Y[0]);
 
 	Y[0] = Y[0] + dY[0]*dt;									// First order euler approximation
 	Y[1] = Y[1] + dY[1]*dt;

@@ -49,5 +49,5 @@ void SimpleMultiRotorTorque(SMRM_control_t *cont_roll, 	SMRM_control_t *cont_pit
 /*Scale the input torque of roll and pitch in such a way it is feasible for
  * sending it to the powerDistribution block
  */
-void SimpleMultiRotorScaleInput(SMRM_control_t *cont_roll,SMRM_control_t *cont_pitch,
-														float TORQUE_SCALING);
+void SimpleMultiRotorScaleInput(control_t *control_SMRM, SMRM_control_t *cont_roll,SMRM_control_t *cont_pitch,
+		float TORQUE_SCALING_ROLL, float TORQUE_SCALING_PITCH);

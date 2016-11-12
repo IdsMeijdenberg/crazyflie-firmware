@@ -18,9 +18,14 @@
 #define DEG_TO_RAD (PI/180.0f)
 #define UPDATE_FREQUENCY 200
 #define CONTROL_RATE 200
+#define Ct (3.1582E-10f)
+#define OMEGAE (13736.0f)
+#define sqrt_2 1.41421356f
+#define d_arm 39.73E-3f
+
 
 //State variables and normal variables for SimpleMultiRotorModel
-KALMAN_gain_t kalman_gain;
+static KALMAN_gain_t kalman_gain;
 static bool isInit = false;
 
 //Private functions
@@ -37,6 +42,16 @@ static void SimpleMultiRotorControl(SMRM_control_t *SMRM_cont, 	const SMRM_state
 		const SMRM_sampled_t *SMRM_samp,
 		const float gyroMeasurement);
 
+static inline int16_t saturateSignedInt16_SMRM(float in)
+{
+  // don't use INT16_MIN, because later we may negate it, which won't work for that value.
+  if (in > 32767)
+    return 32767;
+  else if (in < -32767)
+    return -32767;
+  else
+    return (int16_t)in;
+}
 //Public functions
 void SimpleMultiRotorInit(void)
 {
@@ -88,11 +103,15 @@ void SimpleMultiRotorLocalisation_off(){
 	kalman_gain.Lom = 0;
 }
 
-void SimpleMultiRotorScaleInput(SMRM_control_t *cont_roll,SMRM_control_t *cont_pitch,
-		float TORQUE_SCALING)
+void SimpleMultiRotorScaleInput(control_t *control_SMRM, SMRM_control_t *cont_roll,SMRM_control_t *cont_pitch,
+		float TORQUE_SCALING_ROLL, float TORQUE_SCALING_PITCH)
 {
-	cont_roll->torque = cont_roll->torque*TORQUE_SCALING;
-	cont_pitch->torque= cont_pitch->torque*TORQUE_SCALING;
+//	control_SMRM->roll = saturateSignedInt16_SMRM(cont_roll->torque*TORQUE_SCALING_ROLL);
+//	control_SMRM->pitch= saturateSignedInt16_SMRM(cont_pitch->torque*TORQUE_SCALING_PITCH);
+
+	control_SMRM->roll = saturateSignedInt16_SMRM((0.8/(2.0*OMEGAE)*sqrt_2/(4.0*d_arm*Ct)*cont_roll->torque - 4070.3)/0.2685);  // From RPM to PWM
+	control_SMRM->pitch= saturateSignedInt16_SMRM((0.8/(2.0*OMEGAE)*sqrt_2/(4.0*d_arm*Ct)*cont_pitch->torque - 4070.3)/0.2685);
+
 }
 
 
