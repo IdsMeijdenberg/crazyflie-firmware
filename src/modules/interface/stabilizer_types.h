@@ -183,6 +183,9 @@ typedef struct altitude_state_s {
 	float x_hat;
 	float v_hat;
 	float input;
+	float innovation_1;
+	float innovation_2;
+	float innovation_3;
 } altitude_state_t;
 
 typedef struct KALMAN_gain_s {

@@ -52,10 +52,10 @@
 #endif
 
 static bool isInit;
-static int missedMeasurement = 0;
+static float missedMeasurement = 0;
 static float dt_meas = 0;
+
 uint32_t tick_receive_meas = 0;
-static int startCounting = 1;
 uint32_t tick_control_hold = 0;
 
 
@@ -77,10 +77,7 @@ static control_t control_SMRM;
 static altitude_state_t altitude_state;
 static positionMeasurement_t ext_pos;
 
-#define MEAS_THRESHOLD (0.15f) 		// When there is no new data received for 0.15 seconds, define as measurement intermittence
-#define TORQUE_SCALING_ROLL (10000000.0f) 		// Scaling used for torque needed for suitable values for powerDistribution
-#define TORQUE_SCALING_PITCH (10000.0f)
-
+#define MEAS_THRESHOLD (0.15f) 		// When there is no new data received for 0.15 seconds, switch to OFF-dynamics
 
 static void stabilizerTask(void* param);
 
@@ -117,6 +114,18 @@ bool stabilizerTest(void)
   return pass;
 }
 
+void stabilizerDetectMissedMeasurement(uint32_t tick, uint32_t tick_receive_meas, float *missedMeasurement)
+{
+	float dt_meas = (float)(tick - tick_receive_meas)/1000.0;
+
+	    if (dt_meas >= MEAS_THRESHOLD){
+	    	*missedMeasurement = 1;
+	    }
+	    else{
+	    	*missedMeasurement = 0;
+	    }
+}
+
 /* The stabilizer loop runs at 1kHz (stock) or 500Hz (kalman). It is the
  * responsibility of the different functions to run slower by skipping call
  * (ie. returning without modifying the output structure).
@@ -139,22 +148,14 @@ static void stabilizerTask(void* param)
   while(1) {
     vTaskDelayUntil(&lastWakeTime, F2T(RATE_MAIN_LOOP));
 
-    dt_meas = (float)(xTaskGetTickCount() - tick_receive_meas)/1000.0;
-
-    if (dt_meas >= MEAS_THRESHOLD){
-    	missedMeasurement = 1;
-    }
-    else{
-    	missedMeasurement = 0;
-    }
-
-    if (getExtPosition(&state, &ext_pos) || missedMeasurement == 1) {	// Read new data (if available) OR when detected measurement intermittence
+    stabilizerDetectMissedMeasurement(tick, tick_receive_meas, &missedMeasurement); // Detects if we missed measurement with threshold of 0.15 seconds
+    if (getExtPosition(&state, &ext_pos) || missedMeasurement == 1) {				// Read new data (if available) OR when detected measurement loss
 
     	if (missedMeasurement == 1){
-    		SimpleMultiRotorLocalisation_off();
+    		SimpleMultiRotorLocalisation_off(); 									// Activate OFF-dynamics
     	}
     	else{
-    		SimpleMultiRotorLocalisation_on();
+    		SimpleMultiRotorLocalisation_on(); 										// Activate ON_dynamics
     	}
 
     	SimpleMultiRotorNewPosition(&SMRM_roll, &SMRM_pitch, &ext_pos, &s_roll, &s_pitch);
@@ -162,36 +163,28 @@ static void stabilizerTask(void* param)
         tick_receive_meas = xTaskGetTickCount();
     }
 
-    sensorsAcquire(&sensorData, tick);
-    stateEstimator(&state, &sensorData, tick);
+    sensorsAcquire(&sensorData, tick); 												// We still use the ' old'  part of the controller for yaw stabilisation
+    stateEstimator(&state, &sensorData, tick); 										// as well as to receive RPYT-commands
     commanderGetSetpoint(&setpoint, &state);
-
     sitAwUpdateSetpoint(&setpoint, &sensorData, &state);
     stateController(&control, &sensorData, &state, &setpoint, tick);
 
-    // Update linear-model by first order euler approximation and calculate input torque
-    if (setpoint.thrust > 1000.0){
-    SimpleMultiRotorRunDynamics(&SMRM_roll, &SMRM_pitch, &s_roll, &s_pitch,	sensorData.gyro.x, -sensorData.gyro.y, tick);
-    YawAltitudeRunDynamics(&altitude_state, &ext_pos, &setpoint, tick);
-    SimpleMultiRotorTorque(&cont_roll, &cont_pitch, &SMRM_roll, &SMRM_pitch, &s_roll, &s_pitch, sensorData.gyro.x, -sensorData.gyro.y, tick);
-    SimpleMultiRotorScaleInput(&control_SMRM, &cont_roll, &cont_pitch,TORQUE_SCALING_ROLL, TORQUE_SCALING_PITCH);
+    // Update linear-model by first order Euler approximation and calculate input torque
+    if (setpoint.thrust > 1000.0){ 													// For now, we only update the model when experiment is started from host computer, i.e. thrust from host computer > 1000. Should be replaced by bool such as as startExperiment
+		SimpleMultiRotorRunDynamics(&SMRM_roll, &SMRM_pitch, &s_roll, &s_pitch,	sensorData.gyro.x, -sensorData.gyro.y, tick);
+		YawAltitudeRunDynamics(&altitude_state, &ext_pos, &setpoint_PID, tick);
+		SimpleMultiRotorTorque(&cont_roll, &cont_pitch, &SMRM_roll, &SMRM_pitch, &s_roll, &s_pitch, sensorData.gyro.x, -sensorData.gyro.y, tick);
+		SimpleMultiRotorScaleInput(&control_SMRM, &cont_roll, &cont_pitch);
 
-//    if (startCounting == 1){
-//    	tick_control_hold = xTaskGetTickCount();
-//    	startCounting = 0;
-//		}
-
-//    if (xTaskGetTickCount() - tick_control_hold > 8000){
-    	control.roll = control_SMRM.roll;
-    	control.pitch = control_SMRM.pitch;
-            if (setpoint.thrust < 1000){
-            	setpoint.thrust = 0;
-            }
-            else {
-            	setpoint.thrust = min(setpoint_PID.thrust, 60000);
-            }
-//    	}
-    }
+		control.roll  	= control_SMRM.roll;
+		control.pitch 	= control_SMRM.pitch;
+		control.thrust 	= setpoint_PID.thrust;
+		}
+    else {
+    	control.roll 	= 0;
+    	control.pitch 	= 0;
+    	control.thrust 	= 0;
+	}
 
     powerDistribution(&control);
 
@@ -267,7 +260,7 @@ LOG_ADD(LOG_FLOAT, v_hat, &altitude_state.v_hat)
 LOG_GROUP_STOP(Altitude)
 
 LOG_GROUP_START(ext_pos)
-  LOG_ADD(LOG_INT16, X, &control.roll)
-  LOG_ADD(LOG_INT16, Y, &control_SMRM.roll)
-  LOG_ADD(LOG_INT16, Z, &control_SMRM.pitch)
+  LOG_ADD(LOG_FLOAT, X, &ext_pos.x)
+  LOG_ADD(LOG_FLOAT, Y, &ext_pos.y)
+  LOG_ADD(LOG_FLOAT, Z, &ext_pos.z)
 LOG_GROUP_STOP(ext_pos)

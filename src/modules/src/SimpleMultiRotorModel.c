@@ -4,14 +4,27 @@
 #include "SimpleMultiRotorModel.h"
 
 // MACROS
-#define K_X  (0.3516f)
-#define K_V  (0.2818f)
-#define K_P  (0.0283f)
-#define K_D  (0.0051f)
-#define L_X  (3.3559f)
-#define L_V  (5.2354f)
-#define L_TH (0.4627f)
-#define L_OM (0.1337f)
+
+// Optimal configuration
+#define K_X  (0.9935f)
+#define K_V  (0.4609f)
+#define K_P  (0.0158f)
+#define K_D  (0.0018f)
+#define L_X  (3.2048f)
+#define L_V  (4.7815f)
+#define L_TH (0.3944f)
+#define L_OM (0.0852f)
+
+// non-optimal configuration (= unstable!)
+//#define K_X  (0.6502f)
+//#define K_V  (0.3698f)
+//#define K_P  (0.0024f)
+//#define K_D  (3.7470E-4f)
+//#define L_X  (9.3607f)
+//#define L_V  (35.7403f)
+//#define L_TH (7.2739f)
+//#define L_OM (1.9646f)
+
 #define GRAVITY (9.91f)
 #define J_ROLLPITCH (2.3951e-5f)
 #define PI	3.14159265358979f
@@ -67,7 +80,7 @@ void SimpleMultiRotorNewPosition(SMRM_state_t *SMRM_roll, SMRM_state_t *SMRM_pit
 		SMRM_sampled_t *s_roll,
 		SMRM_sampled_t *s_pitch)
 {
-	SimpleMultiRotorPosition(SMRM_roll, SMRM_pitch, ext_pos); 	// Update x-position of roll and pitch by the measurement of position from GoT
+	SimpleMultiRotorPosition(SMRM_roll, SMRM_pitch, ext_pos); 	// Update linear position of roll and pitch by the measurement of position from GoT
 	SimpleMultiRotorSample(SMRM_roll, s_roll); 					// Update sampled signals x(n), x_hat(n), and v_hat(n) when there is a new measurement
 	SimpleMultiRotorSample(SMRM_pitch, s_pitch);
 }
@@ -103,15 +116,10 @@ void SimpleMultiRotorLocalisation_off(){
 	kalman_gain.Lom = 0;
 }
 
-void SimpleMultiRotorScaleInput(control_t *control_SMRM, SMRM_control_t *cont_roll,SMRM_control_t *cont_pitch,
-		float TORQUE_SCALING_ROLL, float TORQUE_SCALING_PITCH)
+void SimpleMultiRotorScaleInput(control_t *control_SMRM, SMRM_control_t *cont_roll,SMRM_control_t *cont_pitch)
 {
-//	control_SMRM->roll = saturateSignedInt16_SMRM(cont_roll->torque*TORQUE_SCALING_ROLL);
-//	control_SMRM->pitch= saturateSignedInt16_SMRM(cont_pitch->torque*TORQUE_SCALING_PITCH);
-
-	control_SMRM->roll = saturateSignedInt16_SMRM((0.8/(2.0*OMEGAE)*sqrt_2/(4.0*d_arm*Ct)*cont_roll->torque - 4070.3)/0.2685);  // From RPM to PWM
-	control_SMRM->pitch= saturateSignedInt16_SMRM((0.8/(2.0*OMEGAE)*sqrt_2/(4.0*d_arm*Ct)*cont_pitch->torque - 4070.3)/0.2685);
-
+	control_SMRM->roll = saturateSignedInt16_SMRM((1.0/(2.0*OMEGAE)*sqrt_2/(4.0*d_arm*Ct)*cont_roll->torque)/0.8);  // From RPM to PWM
+	control_SMRM->pitch= saturateSignedInt16_SMRM((1.0/(2.0*OMEGAE)*sqrt_2/(4.0*d_arm*Ct)*cont_pitch->torque)/0.8);
 }
 
 
@@ -153,7 +161,7 @@ static void DynamicEquationSMRM(SMRM_state_t *SMRM_st, 	const SMRM_sampled_t *SM
 	dY[2] = gyroMeasurement + Y[3] + kalman_gain.Lth*(SMRM_samp->s_x - SMRM_samp->s_x_hat);
 	dY[3] = kalman_gain.Lom*(SMRM_samp->s_x - SMRM_samp->s_x_hat);
 
-	Y[0] = Y[0] + dY[0]*dt; 			// First order euler approximation
+	Y[0] = Y[0] + dY[0]*dt; 			// First order Euler approximation
 	Y[1] = Y[1] + dY[1]*dt;
 	Y[2] = Y[2] + dY[2]*dt;
 	Y[3] = Y[3] + dY[3]*dt;

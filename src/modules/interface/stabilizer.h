@@ -33,5 +33,7 @@ void stabilizerInit(void);
 
 bool stabilizerTest(void);
 
+void stabilizerDetectMissedMeasurement(uint32_t tick, uint32_t tick_receive_meas, float *missedMeasurement);
+
 
 #endif /* STABALIZER_H_ */

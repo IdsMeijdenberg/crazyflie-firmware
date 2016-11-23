@@ -80,15 +80,12 @@ bool getExtPosition(state_t *state, positionMeasurement_t *ext_pos)
 		  	  	  	  	  	  	  	  	  	  	  	  	  	  	 || (crtpExtPosCache.targetVal[crtpExtPosCache.activeSide].y - lastExtPosy != 0)
 																 || (crtpExtPosCache.targetVal[crtpExtPosCache.activeSide].z - lastExtPosz != 0)))
   {
-    // Get the updated position from the mocap
+    // Get the updated position from GoT
     ext_pos->x = crtpExtPosCache.targetVal[crtpExtPosCache.activeSide].x;
     ext_pos->y = crtpExtPosCache.targetVal[crtpExtPosCache.activeSide].y;
     ext_pos->z = crtpExtPosCache.targetVal[crtpExtPosCache.activeSide].z;
     ext_pos->stdDev = 0.01;
-//    float dt = (float)(xTaskGetTickCount() - lastTimeStamp)/1000.0;
-//    ext_pos->timeStampDelta = dt;
-//
-//    lastTimeStamp = xTaskGetTickCount();
+
     lastExtPosx = ext_pos->x;
     lastExtPosy = ext_pos->y;
     lastExtPosz = ext_pos->z;
